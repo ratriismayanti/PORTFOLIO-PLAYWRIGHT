@@ -1,0 +1,20 @@
+[
+  {
+    "scenario": "checkout gagal karena field kosong",
+    "recipient": "",
+    "phone": "",
+    "street": "",
+    "city": "",
+    "postalCode": "",
+    "expectedError": "Lengkapi alamat pengiriman dulu. Periksa kolom yang ditandai."
+  },
+  {
+    "scenario": "checkout gagal karena nomor HP tidak valid",
+    "recipient": "Rina Wulandari",
+    "phone": "abc",
+    "street": "Jl. Asia Afrika",
+    "city": "Bandung",
+    "postalCode": "40111",
+    "expectedError": "Lengkapi alamat pengiriman dulu. Periksa kolom yang ditandai."
+  }
+]
