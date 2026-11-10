@@ -8,5 +8,10 @@
     "strict": true,
     "types": ["node"]
   },
-  "include": ["src/**/*", "tests/**/*", "test-data/**/*"]
+  "include": [
+    "playwright.config.ts",
+    "src/**/*",
+    "tests/**/*",
+    "test-data/**/*"
+  ]
 }

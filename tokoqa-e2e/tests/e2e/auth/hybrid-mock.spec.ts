@@ -1,63 +1,200 @@
-// Modul 13 — Hybrid testing (API + UI) dan network mocking.
-import { test, expect } from '@playwright/test';
 
-const SHOP = '/shop.html'; // halaman toko
-const ARENA = '/arena.html'; // halaman latihan interaksi
+import {
+  test,
+  expect
+} from '../../../src/fixtures/index';
 
-test.describe('hybrid: login lewat API', () => {
-  let token: string;
+const SHOP = '/shop.html';
 
-  test.beforeEach(async ({ request }) => { // login lewat API sebelum setiap test
-    // Login lewat API (cepat!) dan ambil JWT token-nya
-    const res = await request.post('/api/login', {
-      data: { username: process.env.TOKOQA_USERNAME, password: process.env.TOKOQA_PASSWORD },
+const ARENA = '/arena.html';
+
+// ==================================================
+// 1. LOGIN API, KEMUDIAN BUKA UI
+// ==================================================
+
+test(
+  'Customer dapat membuka toko menggunakan sesi login API',
+  async ({ page, customerSession }) => {
+
+    // Masukkan token sebelum halaman dibuka.
+    await page.addInitScript((token) => {
+
+      window.localStorage.setItem(
+        'tokoqa_token',
+        token
+      );
+
+    }, customerSession.token);
+
+    await page.goto(SHOP);
+
+    await expect(
+      page.getByTestId('greeting')
+    ).toHaveText('Halo, Rina Wulandari');
+
+  }
+);
+
+
+// ==================================================
+// 2. SIAPKAN CART LEWAT API, CEK MELALUI UI
+// ==================================================
+
+test(
+  'Produk yang ditambahkan melalui API muncul di keranjang toko',
+  async ({ page, api, customerSession }) => {
+
+    // Tambahkan Keyboard melalui API.
+    const keyboard = await api.addToCart(
+      customerSession.token,
+      {
+        productId: 1,
+        qty: 1
+      }
+    );
+
+    expect(keyboard.status()).toBe(201);
+
+    // Tambahkan dua Lampu Meja melalui API.
+    const lampu = await api.addToCart(
+      customerSession.token,
+      {
+        productId: 7,
+        qty: 2
+      }
+    );
+
+    expect(lampu.status()).toBe(201);
+
+    // Siapkan login di browser.
+    await page.addInitScript((token) => {
+
+      window.localStorage.setItem(
+        'tokoqa_token',
+        token
+      );
+
+    }, customerSession.token);
+
+    await page.goto(SHOP);
+
+    // Periksa jumlah barang.
+    await expect(
+      page.getByTestId('cart-count')
+    ).toHaveText('3');
+
+    // Periksa total harga.
+    await expect(
+      page.getByTestId('cart-total')
+    ).toHaveText('Rp 990.000');
+
+  }
+);
+
+
+// ==================================================
+// 3. MOCK RESPONSE API
+// ==================================================
+
+test(
+  'Website menampilkan data produk dari respons API palsu',
+  async ({ page }) => {
+
+    await page.route('**/api/products', async (route) => {
+
+      await route.fulfill({
+        json: {
+          total: 1,
+          data: [
+            {
+              id: 99,
+              name: 'Produk Palsu'
+            }
+          ]
+        }
+      });
+
     });
-    token = (await res.json()).token; // simpan token untuk dipakai test
-  });
 
-  test('bypass login UI dengan token', async ({ page }) => {
-    // Taruh token di localStorage SEBELUM halaman dimuat → aplikasi menganggap kita sudah login
-    await page.addInitScript((t) => window.localStorage.setItem('tokoqa_token', t), token);
-    await page.goto(SHOP); // buka toko
-    await expect(page.getByTestId('greeting')).toHaveText('Halo, Rina Wulandari'); // sudah masuk tanpa mengisi form
-  });
+    await page.goto(ARENA);
 
-  test('siapkan data lewat API, cek di UI', async ({ page }) => {
-    const headers = { Authorization: `Bearer ${token}` };
-    await page.request.post('/api/cart', { data: { productId: 1, qty: 1 }, headers }); // siapkan keranjang lewat API: 1 Keyboard
-    await page.request.post('/api/cart', { data: { productId: 7, qty: 2 }, headers }); // dan 2 Lampu Meja
+    await page.getByRole('button', {
+      name: 'Ambil produk'
+    }).click();
 
-    await page.addInitScript((t) => window.localStorage.setItem('tokoqa_token', t), token); // simpan token sebelum halaman dimuat, jadi browser sudah login
-    await page.goto(SHOP); // buka toko
+    await expect(
+      page.getByTestId('api-count')
+    ).toHaveText('1 produk');
 
-    await expect(page.getByTestId('cart-count')).toHaveText('3'); // UI menampilkan isi keranjang dari API
-    await expect(page.getByTestId('cart-total')).toHaveText('Rp 990.000'); // total 750.000 + 2 x 120.000
-  });
-});
+    await expect(
+      page.locator('#api-list li')
+    ).toHaveText(['Produk Palsu']);
 
-test('mock respons API', async ({ page }) => {
-  await page.route('**/api/products', (route) =>
-    route.fulfill({ json: { total: 1, data: [{ id: 99, name: 'Produk Palsu' }] } }), // balas dengan data palsu, request tidak sampai ke server
-  );
-  await page.goto(ARENA); // buka Arena
-  await page.getByRole('button', { name: 'Ambil produk' }).click(); // halaman memanggil API
+  }
+);
 
-  await expect(page.getByTestId('api-count')).toHaveText('1 produk'); // halaman menampilkan data palsu
-  await expect(page.locator('#api-list li')).toHaveText(['Produk Palsu']); // isi daftar sesuai data palsu
-});
 
-test('simulasi server error', async ({ page }) => {
-  await page.route('**/api/products', (route) => route.fulfill({ status: 500, json: { error: 'boom' } }));
-  await page.goto(ARENA); // buka Arena
-  await page.getByRole('button', { name: 'Ambil produk' }).click(); // halaman memanggil API
-  await expect(page.getByTestId('api-count')).toHaveText('Gagal memuat: Server error (500)'); // pesan error tampil di halaman
-});
+// ==================================================
+// 4. SIMULASI SERVER ERROR
+// ==================================================
 
-test('intip respons asli', async ({ page }) => {
-  await page.goto(ARENA);
-  const responsePromise = page.waitForResponse('**/api/products'); // mulai menunggu respons dari URL ini
-  await page.getByRole('button', { name: 'Ambil produk' }).click(); // klik tombol yang memanggil API
-  const response = await responsePromise; // respons yang ditangkap
-  expect(response.ok()).toBe(true); // status 2xx
-  expect((await response.json()).total).toBe(8); // isi respons berisi 8 produk
-});
+test(
+  'Website menampilkan pesan ketika API produk mengalami server error',
+  async ({ page }) => {
+
+    await page.route('**/api/products', async (route) => {
+
+      await route.fulfill({
+        status: 500,
+        json: {
+          error: 'boom'
+        }
+      });
+
+    });
+
+    await page.goto(ARENA);
+
+    await page.getByRole('button', {
+      name: 'Ambil produk'
+    }).click();
+
+    await expect(
+      page.getByTestId('api-count')
+    ).toHaveText(
+      'Gagal memuat: Server error (500)'
+    );
+
+  }
+);
+
+
+// ==================================================
+// 5. MEMERIKSA RESPONS ASLI
+// ==================================================
+
+test(
+  'API mengembalikan delapan produk ketika tombol Ambil produk diklik',
+  async ({ page }) => {
+
+    await page.goto(ARENA);
+
+    // Mulai menunggu respons sebelum tombol diklik.
+    const responsePromise = page.waitForResponse(
+      '**/api/products'
+    );
+
+    await page.getByRole('button', {
+      name: 'Ambil produk'
+    }).click();
+
+    const response = await responsePromise;
+
+    expect(response.ok()).toBe(true);
+
+    const body = await response.json();
+
+    expect(body.total).toBe(8);
+
+  }
+);

@@ -1,25 +1,73 @@
-// Modul 10 — Page Object Model. Bandingkan betapa bersihnya test ini dibanding Modul 7.
-import { test, expect } from '../../../src/fixtures/index';
 
-test('login berhasil', async ({ loginPage, shopPage }) => {
-  await loginPage.open();
-  await loginPage.login('customer', 'rahasia123'); // isi form dan klik Masuk dalam satu langkah
-  await expect(shopPage.greeting).toHaveText('Halo, Rina Wulandari'); // locator sapaan disimpan di ShopPage
-});
+import {
+  test,
+  expect
+} from '../../../src/fixtures/index';
 
-test('login gagal', async ({ loginPage }) => {
-  await loginPage.open();
-  await loginPage.login('customer', 'salah'); // password salah
-  await expect(loginPage.error).toHaveText('Username atau password salah'); // locator pesan error disimpan di LoginPage
-});
+import { wajibEnv } from '../../../src/utils/env';
 
-test('cari produk', async ({ loggedInShop }) => {
-  await loggedInShop.search('mouse');
-  await expect(loggedInShop.productCards).toHaveCount(1); // tersisa 1 kartu produk
-  await expect(loggedInShop.product('Mouse Wireless')).toBeVisible(); // kartu Mouse Wireless terlihat
-});
+// Customer berhasil login.
+test(
+  'Customer dapat login dengan kredensial valid',
+  async ({ loginPage, shopPage }) => {
 
-test('filter kategori', async ({ loggedInShop }) => {
-  await loggedInShop.filterCategory('Furnitur');
-  await expect(loggedInShop.productCards).toHaveCount(2); // 2 produk furnitur
-});
+    await loginPage.open();
+
+    await loginPage.login(
+      wajibEnv('TOKOQA_USERNAME'),
+      wajibEnv('TOKOQA_PASSWORD')
+    );
+
+    await expect(shopPage.greeting)
+      .toHaveText('Halo, Rina Wulandari');
+
+  }
+);
+
+// Customer gagal login dengan password yang salah.
+test(
+  'Customer tidak dapat login dengan password salah',
+  async ({ loginPage }) => {
+
+    await loginPage.open();
+
+    await loginPage.login(
+      wajibEnv('TOKOQA_USERNAME'),
+      'password-salah-untuk-test'
+    );
+
+    await expect(loginPage.error)
+      .toHaveText('Username atau password salah');
+
+  }
+);
+
+// Customer berhasil mencari produk.
+test(
+  'Customer dapat menemukan Mouse Wireless melalui pencarian',
+  async ({ loggedInShop }) => {
+
+    await loggedInShop.search('mouse');
+
+    await expect(loggedInShop.productCards)
+      .toHaveCount(1);
+
+    await expect(
+      loggedInShop.product('Mouse Wireless')
+    ).toBeVisible();
+
+  }
+);
+
+// Customer berhasil memfilter kategori.
+test(
+  'Customer dapat melihat produk kategori Furnitur',
+  async ({ loggedInShop }) => {
+
+    await loggedInShop.filterCategory('Furnitur');
+
+    await expect(loggedInShop.productCards)
+      .toHaveCount(2);
+
+  }
+);

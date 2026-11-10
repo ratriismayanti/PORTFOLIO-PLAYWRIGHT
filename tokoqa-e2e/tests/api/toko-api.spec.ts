@@ -6,7 +6,12 @@
 // 4. Autentikasi & token kedaluwarsa
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import { z } from 'zod';
+import {
+  TokoQAApi,
+  type JsonBody
+} from '../../src/api';
 
+import { wajibEnv } from '../../src/utils/env';
 // Zod: validasi bentuk respons + tipe TypeScript otomatis (alternatif modern JSON Schema)
 const Address = z.object({
   id: z.number().int(),
@@ -33,10 +38,22 @@ const Order = z.object({ // bentuk pesanan yang diharapkan
 const ALAMAT_RUMAH = { label: 'Rumah', recipient: 'Rina Wulandari', phone: '081234567890', city: 'Bandung', postalCode: '40115' }; // data alamat yang valid
 
 /** Login lewat API, kembalikan header Authorization siap pakai. */
-async function login(request: APIRequestContext, username = 'customer', password = 'rahasia123', extra: object = {}) { // login lewat API, kembalikan header token
-  const res = await request.post('/api/login', { data: { username, password, ...extra } });
-  await expect(res).toBeOK(); // harus berhasil
-  return { Authorization: `Bearer ${(await res.json()).token}` }; // header token siap pakai
+async function login(
+  request: APIRequestContext,
+  username = wajibEnv('TOKOQA_USERNAME'),
+  password = wajibEnv('TOKOQA_PASSWORD'),
+  extra: JsonBody = {}
+) {
+
+  const api = new TokoQAApi(request);
+
+  const session = await api.loginSession(
+    username,
+    password,
+    extra
+  );
+
+  return session.headers;
 }
 
 // ---------------------------------------------------------------- 1. CRUD
@@ -159,7 +176,12 @@ test.describe('4. Autentikasi & token', () => {
   });
 
   test('token kedaluwarsa: 401 expired', async ({ request }) => {
-    const kedaluwarsa = await login(request, 'customer', 'rahasia123', { ttl: 0 }); // fitur latihan: langsung kedaluwarsa
+    const kedaluwarsa = await login(
+  request,
+  wajibEnv('TOKOQA_USERNAME'),
+  wajibEnv('TOKOQA_PASSWORD'),
+  { ttl: 0 }
+); // fitur latihan: langsung kedaluwarsa
     const res = await request.get('/api/me', { headers: kedaluwarsa }); // token yang sudah kedaluwarsa
     expect(res.status()).toBe(401); // ditolak 401
     expect((await res.json()).reason).toBe('expired'); // alasannya: kedaluwarsa
